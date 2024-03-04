@@ -29,6 +29,26 @@ dag = DAG(
 
 
 def process_all_departments():
+    
+    folder_path = "./hidak/hidak_link_"
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+        print(f"폴더 '{folder_path}'가 생성되었습니다.")
+    else:
+        print(f"폴더 '{folder_path}'가 이미 존재합니다.")
+    folder_path = "./hidak/hidak_qna_"
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+        print(f"폴더 '{folder_path}'가 생성되었습니다.")
+    else:
+        print(f"폴더 '{folder_path}'가 이미 존재합니다.")
+    folder_path = "./hidak/hidak_processing_"
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+        print(f"폴더 '{folder_path}'가 생성되었습니다.")
+    else:
+        print(f"폴더 '{folder_path}'가 이미 존재합니다.")
+    
     # 과 이름에 대한 코드 매핑
     hidak_all = {
         '가정의학과': 'PF000',
@@ -47,23 +67,23 @@ def process_all_departments():
         '정형외과': 'PO000',
         '신경외과': 'PB000',
         '대장항문': 'PGI00',
-        '흉부외과': 'PC000',
-        '외과': 'PG000',
-        '피부과': 'PS000',
-        '안과': 'PH000',
-        '치과': 'PV000',
-        '비뇨의학과': 'PU000',
-        '산부인과': 'PY000',
-        '한방과': 'PL000',
-        '신경과': 'PN000',
-        '재활의학과': 'PR000',
-        '정신건강의학과': 'PP000',
-        '응급의학과': 'PJ000',
-        '마취통증의학과': 'PT000',
-        '방사선종양학과': 'PX000',
-        '영상의학과': 'PK000',
-        '진담검사의학과': 'PQL00',
-        '작업환경의학과': 'PQ000',
+        # '흉부외과': 'PC000',
+        # '외과': 'PG000',
+        # '피부과': 'PS000',
+        # '안과': 'PH000',
+        # '치과': 'PV000',
+        # '비뇨의학과': 'PU000',
+        # '산부인과': 'PY000',
+        # '한방과': 'PL000',
+        # '신경과': 'PN000',
+        # '재활의학과': 'PR000',
+        # '정신건강의학과': 'PP000',
+        # '응급의학과': 'PJ000',
+        # '마취통증의학과': 'PT000',
+        # '방사선종양학과': 'PX000',
+        # '영상의학과': 'PK000',
+        # '진담검사의학과': 'PQL00',
+        # '작업환경의학과': 'PQ000',
     }
 
     head = {'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"}
@@ -94,7 +114,7 @@ def process_all_departments():
         if link_list:
             # 새로운 파일명 생성 (오늘 날짜)
             today = datetime.today().strftime('%Y-%m-%d')
-            new_file_path = f"/opt/airflow/dags/hidak_link_/{department_code}_{department}_{today}.json"
+            new_file_path = f"/opt/airflow/hidak/hidak_link_/{department_code}_{department}_{yesterday_str}.json"
 
             with open(new_file_path, 'w', encoding='utf-8') as f:
                 json.dump(link_list, f, ensure_ascii=False, indent=4)
@@ -107,10 +127,12 @@ def process_all_departments():
 
 
 def process_all_qna():
-    today = datetime.today().strftime('%Y-%m-%d')
-    for json_file in os.listdir("/opt/airflow/dags/hidak_link_"):
-        if json_file.endswith(".json") and today in json_file:
-            with open(os.path.join("/opt/airflow/dags/hidak_link_", json_file), 'r') as f:
+    yesterday = datetime.today() - timedelta(days=1)
+    yesterday_str = yesterday.strftime('%Y-%m-%d')
+
+    for json_file in os.listdir("/opt/airflow/hidak/hidak_link_"):
+        if json_file.endswith(".json") and yesterday_str in json_file:
+            with open(os.path.join("/opt/airflow/hidak/hidak_link_", json_file), 'r') as f:
                 links_list = json.load(f)
             department = json_file.split("_")[1].split(".")[0]  # 파일명에서 부서명 추출, 확장자 제거
             list1 = links_list
@@ -153,15 +175,15 @@ def process_all_qna():
                     'Hospitals': hospital_list,
                     'Answers': answer
                 })
-            output_directory = "/opt/airflow/dags/hidak_qna_"
-            output_file = os.path.join(output_directory, f"{department}_{today}_QNA.json")
+            output_directory = "/opt/airflow/hidak/hidak_qna_"
+            output_file = os.path.join(output_directory, f"{department}_{yesterday_str}_QNA.json")
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
             print(f"{department}의 새로운 데이터가 저장되었습니다:")
 
 
 
-spacing = Spacing()
+
 # json_directory = "/Users/sseungpp/dev/hidak_dag/qnatest"
 # output_directory = "/Users/sseungpp/dev/hidak_dag/qna_protest"
 
@@ -173,6 +195,7 @@ def remove_special_chars(text):
     return text.replace('\\xa0', '')
 
 def preprocess_json(data_list):
+    spacing = Spacing()
     preprocessed_data = []
     for data in data_list:
         if not data['Date']:  # Date가 비어있는 경우
@@ -196,7 +219,11 @@ def preprocess_json(data_list):
 
 
 
-def preprocess_json_files(json_dir, output_dir):
+def preprocess_json_files():
+    json_dir = "/opt/airflow/hidak/hidak_qna_"
+    output_dir = "/opt/airflow/hidak/hidak_processing_"
+    yesterday = datetime.today() - timedelta(days=1)
+    yesterday_str = yesterday.strftime('%Y-%m-%d')
     for json_file in os.listdir(json_dir):
         if json_file.endswith(".json") and yesterday_str in json_file:
             json_path = os.path.join(json_dir, json_file)
@@ -210,15 +237,10 @@ def preprocess_json_files(json_dir, output_dir):
                 json.dump(preprocessed_data, outfile, default=str, ensure_ascii=False, indent=4)
             print(f"전처리된 데이터가 {output_path}에 저장되었습니다.")
 
-yesterday = datetime.today() - timedelta(days=1)
-yesterday_str = yesterday.strftime('%Y-%m-%d')
 
 
 
 
-
-json_directory = "/opt/airflow/dags/hidak_qna_"
-output_directory = "/opt/airflow/dags/hidak_processing_"
 
 
 today_link1 = PythonOperator(
@@ -238,7 +260,6 @@ today_qna1 = PythonOperator(
 preprocess_task = PythonOperator(
     task_id='preprocess_json_files',
     python_callable=preprocess_json_files,
-    op_args=[json_directory, output_directory],
     dag=dag,
 )
 
