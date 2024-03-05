@@ -152,4 +152,4 @@ insert_to_postgres_task = PythonOperator(
 
 
 # Setting up dependencies
-scrape_doctor_profiles_task >> scrape_info_task >> scrape_details_task >> preprocess_csv_task >> insert_to_postgres_task
+scrape_doctor_profiles_task >> scrape_info_task >> scrape_details_task >> preprocess_csv_task #>> insert_to_postgres_task
