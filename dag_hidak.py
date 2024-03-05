@@ -67,23 +67,23 @@ def process_all_departments():
         '정형외과': 'PO000',
         '신경외과': 'PB000',
         '대장항문': 'PGI00',
-        # '흉부외과': 'PC000',
-        # '외과': 'PG000',
-        # '피부과': 'PS000',
-        # '안과': 'PH000',
-        # '치과': 'PV000',
-        # '비뇨의학과': 'PU000',
-        # '산부인과': 'PY000',
-        # '한방과': 'PL000',
-        # '신경과': 'PN000',
-        # '재활의학과': 'PR000',
-        # '정신건강의학과': 'PP000',
-        # '응급의학과': 'PJ000',
-        # '마취통증의학과': 'PT000',
-        # '방사선종양학과': 'PX000',
-        # '영상의학과': 'PK000',
-        # '진담검사의학과': 'PQL00',
-        # '작업환경의학과': 'PQ000',
+        '흉부외과': 'PC000',
+        '외과': 'PG000',
+        '피부과': 'PS000',
+        '안과': 'PH000',
+        '치과': 'PV000',
+        '비뇨의학과': 'PU000',
+        '산부인과': 'PY000',
+        '한방과': 'PL000',
+        '신경과': 'PN000',
+        '재활의학과': 'PR000',
+        '정신건강의학과': 'PP000',
+        '응급의학과': 'PJ000',
+        '마취통증의학과': 'PT000',
+        '방사선종양학과': 'PX000',
+        '영상의학과': 'PK000',
+        '진담검사의학과': 'PQL00',
+        '작업환경의학과': 'PQ000',
     }
 
     head = {'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"}
@@ -194,8 +194,8 @@ def remove_greeting1(text):
 def remove_special_chars(text):
     return text.replace('\\xa0', '')
 
+spacing = Spacing()
 def preprocess_json(data_list):
-    # spacing = Spacing()
     preprocessed_data = []
     for data in data_list:
         if not data['Date']:  # Date가 비어있는 경우
@@ -210,7 +210,7 @@ def preprocess_json(data_list):
             data['Answers'] = remove_greeting1(data['Answers'])  # 인사말 제거
             data['Answers'] = remove_greeting2(data['Answers'])  # 인사말 제거
             data['Answers'] = remove_special_chars(data['Answers'])  # 특수 문자 제거
-            # data['Answers'] = spacing(data['Answers'])
+            # data['Answers'] = spacing(data['Answers'])text = re.sub(r'\p{Hangul}+과전문의.*?입니다\.', '', text)
             data['Question'] = remove_special_chars(data['Question'])  # 특수 문자 제거
             if '삭제' not in data['Question']:  # '삭제' 키워드가 없는 경우만 추가
                 preprocessed_data.append(data)
