@@ -7,7 +7,9 @@ import os
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from pykospacing import Spacing
-
+import psycopg2
+from sqlalchemy import create_engine
+import pandas as pd
 
 default_args = {
     'owner': 'airflow',
@@ -241,6 +243,49 @@ def preprocess_json_files():
 
 
 
+def insert_data_to_postgres(**kwargs):
+    json_file_path = "/opt/airflow/hidak/hidak_processing_/"
+    
+    # # PostgreSQL 연결 설정
+    # user = 'your_username'
+    # password = 'your_password'
+    # host = 'localhost'  # 또는 데이터베이스 호스트 주소
+    # port = '5432'  # 또는 데이터베이스 포트 번호
+    # dbname = 'your_database_name'
+    
+    # engine = create_engine(f'postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}')
+
+
+    # PostgreSQL 연결 설정
+    # 로컬에서 실행할 경우 아래 ip로 설정
+    # engine = create_engine('postgresql+psycopg2://encore:hadoop@54.180.156.162:5432/qna')
+    
+    # ec2 인스턴스에서 실행할땐 아래 ip로 설정
+    engine = create_engine('postgresql+psycopg2://encore:hadoop@172.31.13.180:5432/qna')
+
+    for file in os.listdir(json_file_path):
+        if file.endswith(".json"):
+            # json 파일의 전체 경로
+            file_path = os.path.join(json_file_path, file)
+            
+            # json 파일을 DataFrame으로 읽기
+            df = pd.read_json(file_path)
+            
+            # DataFrame을 PostgreSQL 테이블에 삽입
+            df.to_sql('processed_data_hidak', engine, if_exists='append', index=False)
+    webhook_url = os.getenv("SLACK_WEBHOOK_URL_MEDICAL")
+    if webhook_url:
+        message = {"text": "전처리된 QnA데이터 DB에 저장 완료!"}
+        response = requests.post(
+            webhook_url,
+            data=json.dumps(message),
+            headers={"Content-Type": "application/json"},
+        )
+        print(response.status_code, response.text)
+    else:
+        print("SLACK_WEBHOOK_URL_MEDICAL 환경 변수가 설정되지 않았습니다.")
+
+
 
 
 
@@ -264,7 +309,13 @@ preprocess_task = PythonOperator(
     dag=dag,
 )
 
-today_link1 >> today_qna1 >> preprocess_task  
+insert_to_DB = PythonOperator(
+    task_id='insert_to_DB',
+    python_callable=insert_data_to_postgres,
+    dag=dag,
+)
+
+today_link1 >> today_qna1 >> preprocess_task >> insert_to_DB
 
 
 

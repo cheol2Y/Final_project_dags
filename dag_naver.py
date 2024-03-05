@@ -112,13 +112,17 @@ def insert_data_to_postgres(**kwargs):
 
 
     # PostgreSQL 연결 설정
-    engine = create_engine('postgresql+psycopg2://postgres:root123@172.23.189.177:5432/test')
-
+    # 로컬에서 실행할 경우 아래 ip로 설정
+    # engine = create_engine('postgresql+psycopg2://encore:hadoop@54.180.156.162:5432/qna')
+    
+    # ec2 인스턴스에서 실행할땐 아래 ip로 설정
+    engine = create_engine('postgresql+psycopg2://encore:hadoop@172.31.13.180:5432/qna')
+    
     # 전처리된 데이터를 DataFrame으로 읽기
     df = pd.read_csv(preprocessed_csv_file_path)
 
     # DataFrame을 PostgreSQL 테이블에 삽입
-    df.to_sql('processed_data', engine, if_exists='append', index=False)
+    df.to_sql('processed_data_naver', engine, if_exists='append', index=False)
     webhook_url = os.getenv("SLACK_WEBHOOK_URL_MEDICAL")
     if webhook_url:
         message = {"text": "전처리된 QnA데이터 DB에 저장 완료!"}
@@ -159,13 +163,13 @@ preprocess_csv_task = PythonOperator(
     dag=dag,
 )
 
-# insert_to_postgres_task = PythonOperator(
-#     task_id='insert_to_postgres',
-#     python_callable=insert_data_to_postgres,
-#     dag=dag,
-# )
+insert_to_postgres_task = PythonOperator(
+    task_id='insert_to_postgres',
+    python_callable=insert_data_to_postgres,
+    dag=dag,
+)
 
 
 
 # Setting up dependencies
-scrape_doctor_profiles_task >> scrape_info_task >> scrape_details_task >> preprocess_csv_task #>> insert_to_postgres_task
+scrape_doctor_profiles_task >> scrape_info_task >> scrape_details_task >> preprocess_csv_task >> insert_to_postgres_task
