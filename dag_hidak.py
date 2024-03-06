@@ -7,9 +7,7 @@ import os
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from pykospacing import Spacing
-import psycopg2
-from sqlalchemy import create_engine
-import pandas as pd
+
 
 default_args = {
     'owner': 'airflow',
@@ -31,26 +29,6 @@ dag = DAG(
 
 
 def process_all_departments():
-    
-    folder_path = "./hidak/hidak_link_"
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
-        print(f"폴더 '{folder_path}'가 생성되었습니다.")
-    else:
-        print(f"폴더 '{folder_path}'가 이미 존재합니다.")
-    folder_path = "./hidak/hidak_qna_"
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
-        print(f"폴더 '{folder_path}'가 생성되었습니다.")
-    else:
-        print(f"폴더 '{folder_path}'가 이미 존재합니다.")
-    folder_path = "./hidak/hidak_processing_"
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
-        print(f"폴더 '{folder_path}'가 생성되었습니다.")
-    else:
-        print(f"폴더 '{folder_path}'가 이미 존재합니다.")
-    
     # 과 이름에 대한 코드 매핑
     hidak_all = {
         '가정의학과': 'PF000',
@@ -116,7 +94,7 @@ def process_all_departments():
         if link_list:
             # 새로운 파일명 생성 (오늘 날짜)
             today = datetime.today().strftime('%Y-%m-%d')
-            new_file_path = f"/opt/airflow/hidak/hidak_link_/{department_code}_{department}_{yesterday_str}.json"
+            new_file_path = f"/opt/airflow/dags/hidak_link_/{department_code}_{department}_{today}.json"
 
             with open(new_file_path, 'w', encoding='utf-8') as f:
                 json.dump(link_list, f, ensure_ascii=False, indent=4)
@@ -129,12 +107,10 @@ def process_all_departments():
 
 
 def process_all_qna():
-    yesterday = datetime.today() - timedelta(days=1)
-    yesterday_str = yesterday.strftime('%Y-%m-%d')
-
-    for json_file in os.listdir("/opt/airflow/hidak/hidak_link_"):
-        if json_file.endswith(".json") and yesterday_str in json_file:
-            with open(os.path.join("/opt/airflow/hidak/hidak_link_", json_file), 'r') as f:
+    today = datetime.today().strftime('%Y-%m-%d')
+    for json_file in os.listdir("/opt/airflow/dags/hidak_link_"):
+        if json_file.endswith(".json") and today in json_file:
+            with open(os.path.join("/opt/airflow/dags/hidak_link_", json_file), 'r') as f:
                 links_list = json.load(f)
             department = json_file.split("_")[1].split(".")[0]  # 파일명에서 부서명 추출, 확장자 제거
             list1 = links_list
@@ -169,23 +145,33 @@ def process_all_qna():
                 answer = []
                 for x in range(1,len(a)):
                     answer.append(a[x].text.strip())
-                data.append({
-                    'Date': date,
-                    'Title': title_,
-                    'Question': question,
-                    'Doctors': doctor_list,
-                    'Hospitals': hospital_list,
-                    'Answers': answer
-                })
-            output_directory = "/opt/airflow/hidak/hidak_qna_"
-            output_file = os.path.join(output_directory, f"{department}_{yesterday_str}_QNA.json")
+                if date == yesterday_str:
+                    data.append({
+                        'Date': date,
+                        'Title': title_,
+                        'Question': question,
+                        'Doctors': doctor_list,
+                        'Hospitals': hospital_list,
+                        'Answers': answer
+                    })
+                else :
+                    data = ({
+                        'Date': '',
+                        'Title': '',
+                        'Question': '',
+                        'Doctors': [],
+                        'Hospitals': [],
+                        'Answers': []
+                    })
+            output_directory = "/opt/airflow/dags/hidak_qna_"
+            output_file = os.path.join(output_directory, f"{department}_{today}_QNA.json")
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
             print(f"{department}의 새로운 데이터가 저장되었습니다:")
 
 
 
-
+spacing = Spacing()
 # json_directory = "/Users/sseungpp/dev/hidak_dag/qnatest"
 # output_directory = "/Users/sseungpp/dev/hidak_dag/qna_protest"
 
@@ -196,7 +182,6 @@ def remove_greeting1(text):
 def remove_special_chars(text):
     return text.replace('\\xa0', '')
 
-spacing = Spacing()
 def preprocess_json(data_list):
     preprocessed_data = []
     for data in data_list:
@@ -205,14 +190,14 @@ def preprocess_json(data_list):
             return preprocessed_data
         else:
             # 전처리 적용
-            # data['Title'] = spacing(data['Title'])
-            # data['Question'] = spacing(data['Question'])
+            data['Title'] = spacing(data['Title'])
+            data['Question'] = spacing(data['Question'])
             data['Answers'] = ''.join(data['Answers'])  # 리스트를 문자열로 변환
             data['Question'] = remove_greeting1(data['Question'])  # 인사말 제거
             data['Answers'] = remove_greeting1(data['Answers'])  # 인사말 제거
             data['Answers'] = remove_greeting2(data['Answers'])  # 인사말 제거
             data['Answers'] = remove_special_chars(data['Answers'])  # 특수 문자 제거
-            # data['Answers'] = spacing(data['Answers'])text = re.sub(r'\p{Hangul}+과전문의.*?입니다\.', '', text)
+            data['Answers'] = spacing(data['Answers'])
             data['Question'] = remove_special_chars(data['Question'])  # 특수 문자 제거
             if '삭제' not in data['Question']:  # '삭제' 키워드가 없는 경우만 추가
                 preprocessed_data.append(data)
@@ -221,14 +206,8 @@ def preprocess_json(data_list):
 
 
 
-def preprocess_json_files():
-    json_dir = "/opt/airflow/hidak/hidak_qna_"
-    output_dir = "/opt/airflow/hidak/hidak_processing_"
-    yesterday = datetime.today() - timedelta(days=1)
-    yesterday_str = yesterday.strftime('%Y-%m-%d')
-    print(yesterday_str)
+def preprocess_json_files(json_dir, output_dir):
     for json_file in os.listdir(json_dir):
-        print(json_file)
         if json_file.endswith(".json") and yesterday_str in json_file:
             json_path = os.path.join(json_dir, json_file)
             with open(json_path, 'r', encoding='utf-8') as f:
@@ -241,52 +220,15 @@ def preprocess_json_files():
                 json.dump(preprocessed_data, outfile, default=str, ensure_ascii=False, indent=4)
             print(f"전처리된 데이터가 {output_path}에 저장되었습니다.")
 
-
-
-def insert_data_to_postgres(**kwargs):
-    json_file_path = "/opt/airflow/hidak/hidak_processing_/"
-    
-    # # PostgreSQL 연결 설정
-    # user = 'your_username'
-    # password = 'your_password'
-    # host = 'localhost'  # 또는 데이터베이스 호스트 주소
-    # port = '5432'  # 또는 데이터베이스 포트 번호
-    # dbname = 'your_database_name'
-    
-    # engine = create_engine(f'postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}')
-
-
-    # PostgreSQL 연결 설정
-    # 로컬에서 실행할 경우 아래 ip로 설정
-    # engine = create_engine('postgresql+psycopg2://encore:hadoop@54.180.156.162:5432/qna')
-    
-    # ec2 인스턴스에서 실행할땐 아래 ip로 설정
-    engine = create_engine('postgresql+psycopg2://encore:hadoop@172.31.13.180:5432/qna')
-
-    for file in os.listdir(json_file_path):
-        if file.endswith(".json"):
-            # json 파일의 전체 경로
-            file_path = os.path.join(json_file_path, file)
-            
-            # json 파일을 DataFrame으로 읽기
-            df = pd.read_json(file_path)
-            
-            # DataFrame을 PostgreSQL 테이블에 삽입
-            df.to_sql('processed_data_hidak', engine, if_exists='append', index=False)
-    webhook_url = os.getenv("SLACK_WEBHOOK_URL_MEDICAL")
-    if webhook_url:
-        message = {"text": "전처리된 QnA데이터 DB에 저장 완료!"}
-        response = requests.post(
-            webhook_url,
-            data=json.dumps(message),
-            headers={"Content-Type": "application/json"},
-        )
-        print(response.status_code, response.text)
-    else:
-        print("SLACK_WEBHOOK_URL_MEDICAL 환경 변수가 설정되지 않았습니다.")
+yesterday = datetime.today() - timedelta(days=1)
+yesterday_str = yesterday.strftime('%Y-%m-%d')
 
 
 
+
+
+json_directory = "/opt/airflow/dags/hidak_qna_"
+output_directory = "/opt/airflow/dags/hidak_processing_"
 
 
 today_link1 = PythonOperator(
@@ -306,16 +248,11 @@ today_qna1 = PythonOperator(
 preprocess_task = PythonOperator(
     task_id='preprocess_json_files',
     python_callable=preprocess_json_files,
+    op_args=[json_directory, output_directory],
     dag=dag,
 )
 
-insert_to_DB = PythonOperator(
-    task_id='insert_to_DB',
-    python_callable=insert_data_to_postgres,
-    dag=dag,
-)
-
-today_link1 >> today_qna1 >> preprocess_task >> insert_to_DB
+today_link1 >> today_qna1 >> preprocess_task  
 
 
 
