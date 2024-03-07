@@ -28,7 +28,11 @@ def scrape_doctor_profiles(max_pages, start_page=1):
                 doctor_name = doctor_link_tag.text.strip()
                 doctor_id = doctor_link_tag["href"].split("u=")[1]
                 specialty_tag = item.find("h6")
-                specialty = specialty_tag.text.strip() if specialty_tag else "정보 없음"
+                hospitals = (
+                    specialty_tag.text.split(" ")[0].strip()
+                    if specialty_tag
+                    else "정보 없음"
+                )
                 affiliation_tag = item.find("th", string="소속기관")
                 affiliation = (
                     affiliation_tag.find_next("td").text.strip()
@@ -47,23 +51,12 @@ def scrape_doctor_profiles(max_pages, start_page=1):
                         "index": index,
                         "doctor_id": doctor_id,
                         "doctor_name": doctor_name,
-                        "specialty": specialty,
+                        "hospitals": hospitals,
                         "total_answers": answer_count,
                         "affiliation": affiliation,
                     }
                 )
 
-    webhook_url = os.getenv("SLACK_WEBHOOK_URL_MEDICAL")
-    if webhook_url:
-        message = {"text": "네이버 의사 id 수집 완료 (현재 max_page : 50 설정)!"}
-        response = requests.post(
-            webhook_url,
-            data=json.dumps(message),
-            headers={"Content-Type": "application/json"},
-        )
-        print(response.status_code, response.text)
-    else:
-        print("SLACK_WEBHOOK_URL_MEDICAL 환경 변수가 설정되지 않았습니다.")
     print(type(doctor_info))
     return doctor_info
 
