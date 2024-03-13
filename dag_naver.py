@@ -33,7 +33,7 @@ local_timezone = timezone(
 default_args = {
     "owner": "airflow",
     "depends_on_past": False,
-    "start_date": local_timezone.localize(datetime(2024, 3, 7, 23, 45)),
+    "start_date": local_timezone.localize(datetime(2024, 3, 10, 23, 45)),
     "email_on_failure": False,
     "email_on_retry": False,
     "retries": 1,

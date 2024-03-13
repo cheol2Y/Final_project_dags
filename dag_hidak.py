@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 import os
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.providers.slack.operators.slack_webhook import SlackWebhookOperator
+from dotenv import load_dotenv
+import csv
 
 # from pykospacing import Spacing
 import psycopg2
@@ -14,14 +17,12 @@ import pandas as pd
 
 from pytz import timezone
 
-local_timezone = timezone(
-    "Asia/Seoul"
-) 
+local_timezone = timezone("Asia/Seoul")
 
 default_args = {
     "owner": "airflow",
     "depends_on_past": False,
-    "start_date": local_timezone.localize(datetime(2024, 3, 7, 23, 45)),
+    "start_date": local_timezone.localize(datetime(2024, 3, 10, 23, 45)),
     "email_on_failure": False,
     "email_on_retry": False,
     "retries": 1,
@@ -94,7 +95,8 @@ def process_all_departments():
             json.dump(link_list, f, ensure_ascii=False, indent=4)
 
 
-def process_all_qna():
+def process_all_qna_v2():
+    today = datetime.today().strftime("%Y-%m-%d")
     yesterday = datetime.today() - timedelta(days=1)
     yesterday_str = yesterday.strftime("%Y-%m-%d")
 
@@ -102,7 +104,6 @@ def process_all_qna():
         if json_file.endswith(".json") and yesterday_str in json_file:
             with open(os.path.join("./hidak/hidak_link_", json_file), "r") as f:
                 links_list = json.load(f)
-
             list1 = links_list
 
             head = {
@@ -138,17 +139,19 @@ def process_all_qna():
                 answer = []
                 for x in range(1, len(a)):
                     answer.append(a[x].text.strip())
+
                 if date == yesterday_str:
                     data.append(
                         {
                             "date": date,
                             "title": title_,
                             "question": question,
-                            "answer": answer,
                             "doctors": doctor_list,
                             "hospitals": hospital_list,
+                            "answer": answer,
                         }
                     )
+                # print(data)
             if len(data) == 0:
                 data = [
                     (
@@ -156,16 +159,29 @@ def process_all_qna():
                             "date": "",
                             "title": "",
                             "question": "",
-                            "answer": [],
                             "doctors": [],
                             "hospitals": [],
+                            "answer": [],
                         }
                     )
                 ]
-            output_directory = "./hidak/hidak_qna_"
-            output_file = os.path.join(output_directory, f"{yesterday_str}_qna.json")
-            with open(output_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
+            output_file = f"./hidak/hidak_qna_/{yesterday_str}_qna.csv"
+            with open(output_file, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(
+                    ["date", "title", "question", "doctors", "hospitals", "answer"]
+                )
+                for item in data:
+                    writer.writerow(
+                        [
+                            item["date"],
+                            item["title"],
+                            item["question"],
+                            ", ".join(item["doctors"]),
+                            ", ".join(item["hospitals"]),
+                            ", ".join(item["answer"]),
+                        ]
+                    )
 
 
 # json_directory = "/Users/sseungpp/dev/hidak_dag/qnatest"
@@ -185,60 +201,52 @@ def remove_special_chars(text):
 
 
 # spacing = Spacing()
-def preprocess_json(data_list):
+def preprocess_json(df):
     preprocessed_data = []
-    for data in data_list:
-        if not data["date"]:  # Date가 비어있는 경우
-            preprocessed_data = data
-            return preprocessed_data
-        else:
-            # 전처리 적용
-            # data['Title'] = spacing(data['Title'])
-            # data['Question'] = spacing(data['Question'])
-            data["answer"] = "".join(data["answer"])  # 리스트를 문자열로 변환
-            data["question"] = remove_greeting1(data["question"])  # 인사말 제거
-            data["doctors"] = data["doctors"][0]
-            data["hospitals"] = data["hospitals"][0]
-            data["answer"] = remove_greeting1(data["answer"])  # 인사말 제거
-            data["answer"] = remove_greeting2(data["answer"])  # 인사말 제거
-            data["answer"] = remove_special_chars(data["answer"])  # 특수 문자 제거
-            # data['answers'] = spacing(data['Answers'])text = re.sub(r'\p{Hangul}+과전문의.*?입니다\.', '', text)
-            data["question"] = remove_special_chars(data["question"])  # 특수 문자 제거
-            if "삭제" not in data["question"]:  # '삭제' 키워드가 없는 경우만 추가
-                preprocessed_data.append(data)
+
+    for index, row in df.iterrows():
+        data = {}
+        data["date"] = row["date"]
+        data["title"] = row["title"]
+        data["question"] = remove_greeting1(row["question"])  # 인사말 제거
+        data["doctors"] = row["doctors"]
+        data["hospitals"] = row["hospitals"]
+        data["answer"] = "".join(row["answer"])  # 리스트를 문자열로 변환
+        data["answer"] = remove_greeting1(data["answer"])  # 인사말 제거
+        data["answer"] = remove_greeting2(data["answer"])  # 인사말 제거
+        data["answer"] = remove_special_chars(data["answer"])  # 특수 문자 제거
+        data["question"] = remove_special_chars(data["question"])  # 특수 문자 제거
+
+        if "삭제" not in data["question"]:  # '삭제' 키워드가 없는 경우만 추가
+            preprocessed_data.append(data)
+
     return preprocessed_data
 
 
 def preprocess_json_files():
-    json_dir = "/opt/airflow/hidak/hidak_qna_"
-    output_dir = "/opt/airflow/hidak/hidak_processing_"
+    csv_dir = "./hidak/hidak_qna_/"
+    output_dir = "./hidak/hidak_processing_/"
     yesterday = datetime.today() - timedelta(days=1)
     yesterday_str = yesterday.strftime("%Y-%m-%d")
     print(yesterday_str)
-    for json_file in os.listdir(json_dir):
-        print(json_file)
-        if json_file.endswith(".json") and yesterday_str in json_file:
-            json_path = os.path.join(json_dir, json_file)
-            with open(json_path, "r", encoding="utf-8") as f:
-                data_list = json.load(f)
-            preprocessed_data = preprocess_json(data_list)
+    for csv_file in os.listdir(csv_dir):
+        if csv_file.endswith(".csv") and yesterday_str in csv_file:
+            csv_path = os.path.join(csv_dir, csv_file)
+            df = pd.read_csv(csv_path)  # CSV 파일 읽기
+            preprocessed_data = preprocess_json(df)  # 데이터프레임 전처리 함수 호출
 
-            output_filename = os.path.splitext(json_file)[0] + "_pros.json"
+            output_filename = f"{yesterday_str}_qna_pros.csv"
             output_path = os.path.join(output_dir, output_filename)
-            with open(output_path, "w", encoding="utf-8") as outfile:
-                json.dump(
-                    preprocessed_data,
-                    outfile,
-                    default=str,
-                    ensure_ascii=False,
-                    indent=4,
-                )
+            print(output_path)
+            df = pd.DataFrame(preprocessed_data)
+            df.to_csv(output_path, index=False, encoding="utf-8")
             print(f"전처리된 데이터가 {output_path}에 저장되었습니다.")
 
 
 def insert_data_to_postgres(**kwargs):
-    json_file_path = "/opt/airflow/hidak/hidak_processing_/"
-
+    csv_file_path = "/opt/airflow/hidak/hidak_processing_/"
+    yesterday = datetime.today() - timedelta(days=1)
+    yesterday_str = yesterday.strftime("%Y-%m-%d")
     # # PostgreSQL 연결 설정
     # user = 'your_username'
     # password = 'your_password'
@@ -255,13 +263,13 @@ def insert_data_to_postgres(**kwargs):
     # ec2 인스턴스에서 실행할땐 아래 ip로 설정
     engine = create_engine("postgresql+psycopg2://encore:hadoop@172.31.13.180:5432/qna")
 
-    for file in os.listdir(json_file_path):
-        if file.endswith(".json"):
+    for file in os.listdir(csv_file_path):
+        if file.endswith(".csv") and yesterday_str in file:
             # json 파일의 전체 경로
-            file_path = os.path.join(json_file_path, file)
+            file_path = os.path.join(csv_file_path, file)
 
             # json 파일을 DataFrame으로 읽기
-            df = pd.read_json(file_path)
+            df = pd.read_csv(file_path)
             df["date"] = pd.to_datetime(df["date"]).dt.date
             df["title"] = df["title"].astype("str")
             df["question"] = df["question"].astype("str")
@@ -270,17 +278,25 @@ def insert_data_to_postgres(**kwargs):
             df["answer"] = df["answer"].astype("str")
             # DataFrame을 PostgreSQL 테이블에 삽입
             df.to_sql("processed_data_hidak", engine, if_exists="append", index=False)
-    webhook_url = os.getenv("SLACK_WEBHOOK_URL_MEDICAL")
-    if webhook_url:
-        message = {"text": "전처리된 QnA데이터 DB에 저장 완료!"}
-        response = requests.post(
-            webhook_url,
-            data=json.dumps(message),
-            headers={"Content-Type": "application/json"},
+
+
+# .env 파일에서 환경변수 로드
+load_dotenv()
+
+# 환경변수에서 Slack Webhook URL 가져오기
+slack_webhook_url = os.getenv("SLACK_WEBHOOK_URL_MEDICAL")
+
+
+def send_slack_notification(ds, **kwargs):
+    message = "Airflow DAG 실행 완료: {}".format(ds)
+    data = {"text": message}
+
+    response = requests.post(slack_webhook_url, json=data)
+
+    if response.status_code != 200:
+        raise ValueError(
+            "Slack에 메시지를 보내는 데 실패했습니다. 응답: {}".format(response.text)
         )
-        print(response.status_code, response.text)
-    else:
-        print("SLACK_WEBHOOK_URL_MEDICAL 환경 변수가 설정되지 않았습니다.")
 
 
 today_link1 = PythonOperator(
@@ -292,7 +308,7 @@ today_link1 = PythonOperator(
 
 today_qna1 = PythonOperator(
     task_id="today_qna1",
-    python_callable=process_all_qna,
+    python_callable=process_all_qna_v2,
     dag=dag,
 )
 
@@ -309,4 +325,9 @@ insert_to_DB = PythonOperator(
     dag=dag,
 )
 
-today_link1 >> today_qna1 >> preprocess_task >> insert_to_DB
+send_notification = PythonOperator(
+    task_id="send_slack_notification", python_callable=send_slack_notification, dag=dag
+)
+
+
+today_link1 >> today_qna1 >> preprocess_task >> insert_to_DB >> send_notification
